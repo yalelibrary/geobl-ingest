@@ -1,0 +1,19 @@
+#!/usr/bin/env ruby
+#docker-compose run web bash ruby bin/get_c12_count
+#require Rails.root.join('config/environment.rb')
+#require File.expand_path('../../config/environment', __FILE__)
+Rails.logger = Logger.new("#{Rails.root}/log/ingest.log",10,200.megabytes)
+Rails.logger.formatter = Logger::Formatter.new
+
+  #methods
+  def get_c12_count
+    ds = SQLServer.execute(%Q/select COUNT(*) as COUNT from c12/)
+    dsArr = Array.new
+    ds.each do |ds1|
+      dsArr.push(ds1)
+    end
+    ds.cancel
+    dsArr[0]
+  end
+
+  puts "testsql output: #{get_c12_count}"

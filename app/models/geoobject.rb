@@ -1,0 +1,2 @@
+class Geoobject < ApplicationRecord
+end

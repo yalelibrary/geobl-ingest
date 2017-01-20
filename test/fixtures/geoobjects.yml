@@ -1,0 +1,44 @@
+# Read about fixtures at http://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  oid: 1
+  _oid: 0
+  level: 1
+  pid: digcoll:whatever1
+  orig_date: 2017-01-16 07:18:36
+  test_handle: null
+  prod_handle: null
+  last_process_start: null
+  last_process_end: null
+  processed_index: null
+  error: null
+  processed: null
+
+two:
+  oid: 2
+  _oid: 1
+  level: 1
+  pid: digcoll:whatever2
+  orig_date: 2017-01-16 07:18:36
+  test_handle: null
+  prod_handle: null
+  last_process_start: null
+  last_process_end: null
+  processed_index: null
+  error: null
+  processed: null
+
+#orig commented out for reference
+#two:
+#  oid: 2
+#  _oid: 1
+#  level: 1
+#  pid: digcoll:whatever2
+#  orig_date: 2017-01-16 07:18:36
+#  test_handle: MyString
+#  prod_handle: MyString
+#  last_process_start: 2017-01-16 07:18:36
+#  last_process_end: 2017-01-16 07:18:36
+#  processed_index: 1
+#  error: MyText
+#  processed: MyString
