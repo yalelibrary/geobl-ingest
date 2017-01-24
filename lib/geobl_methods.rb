@@ -91,6 +91,13 @@ module GeoblMethods
           dc_language_s: create_value(lbfields,84),
           dc_publisher: create_value(lbfields,69),
           dc_subject_sm: create_values(lbfields,90),
+          dct_spatial_sm: create_spatial(lbfields),
+          dct_temporal_sm: create_values(lbfields,79),
+          layer_modified_dt: go.orig_date.strftime('%Y-%m-%dT%H-%M-%SZ'),
+          layer_id_s: handle,
+          dct_references_s: create_dct_references(go),
+          dc_format_s: create_value(lbfields,157),
+          dct_issued_dt: Time.now.strftime('%Y-%m-%dT%H-%M-%SZ')
       }
       solr_json
     end
@@ -114,7 +121,7 @@ module GeoblMethods
     #solr_year_i parse 79.first or skip
     #layer_modified_dt orig_date from geoobjects
     #layer_id_s test_handle|prod_handle from geoobjects
-    #dct_references_s http://iiif.io/api/image http://schema.org/url http://www.loc.gov/mods/v3
+    #dct_references_s http://iiif.io/api/image http://schema.org/url http://www.loc.gov/mods/v3 (oid and hydraid)
     #layer_geom_type_s fdid 99 cartographic=>Scanned Map
     #dc_format_s fdid"=>157 (image/tiff)?
     #dct_issued_dt now() ?
@@ -152,6 +159,22 @@ module GeoblMethods
       a = Array.new
       fields.each { |x| a.push(x["value"])}
       a
+    end
+
+    def create_spatial(lbfields)
+      a = Array.new
+      a.push(lbfields.find { |x| x["fdid"]==294}["value"]) if lbfields.find { |x| x["fdid"]==294}
+      a.push(lbfields.find { |x| x["fdid"]==295}["value"]) if lbfields.find { |x| x["fdid"]==295}
+      a.push(lbfields.find { |x| x["fdid"]==296}["value"]) if lbfields.find { |x| x["fdid"]==296}
+      a.push(lbfields.find { |x| x["fdid"]==297}["value"]) if lbfields.find { |x| x["fdid"]==297}
+      a
+    end
+
+    def create_dct_references(go)
+      iiif = "http://myiiifserver"
+      schema_url = "http://myurl"
+      mods = "http://mymods"
+      "{\"http://iiif.io/api/image\":\"#{iiif}\",\"http://schema.org/url\":\"#{schema_url}\",\"http://www.loc.gov/mods/v3\":\"#{mods}\"}"
     end
 
     def document(solr_doc)
