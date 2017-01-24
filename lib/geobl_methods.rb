@@ -1,3 +1,6 @@
+require 'json-schema'
+require 'open-uri'
+#rake lb2geo:create_geobl_schema
 module GeoblMethods
 
   def self.process_simple(level,environ)
@@ -10,6 +13,7 @@ module GeoblMethods
       #get_md.print_results(get_md.concat_results)
       solr_doc = get_md.create_solr(get_md.concat_results,get_md.get_geoobject,environ)
       puts "json: #{solr_doc.inspect}"
+      #puts "json: #{get_md.document(solr_doc).inspect}"
     end
   end
   class GetLadybirdMetadata
@@ -17,6 +21,9 @@ module GeoblMethods
     attr_accessor :strings
     attr_accessor :lstrings
     attr_accessor :acids
+
+    GEOBLACKLIGHT_RELEASE_VERSION = 'v1.1.2'.freeze
+    GEOBLACKLIGHT_SCHEMA = JSON.parse(open("https://raw.githubusercontent.com/geoblacklight/geoblacklight/#{GEOBLACKLIGHT_RELEASE_VERSION}/schema/geoblacklight-schema.json").read).freeze
 
     def initialize(oid)
       @oid = oid
@@ -63,15 +70,27 @@ module GeoblMethods
     end
 
     def create_solr(lbfields,go,environ)
-      #if environ == "test"
-      #  handle = "http://hdl.handle.net/#{go.test_handle}"
-      #elsif environ == "prod"
-      #  handle = "http://hdl.handle.net/#{go.prod_handle}"
-      #end
+      if environ == "test"
+        handle = go.test_handle
+      elsif environ == "prod"
+        handle = go.prod_handle
+      end
+      if handle
+        layer_slug = "yale-#{handle.split("/")[1]}" if handle
+      end
       solr_json = {
           geoblacklight_version: "1.0",
-          #dc_identifier_s: "http:/hdl.handle.net/#{handle}",
-          dc_title_s: lbfields.find { |x| x["fdid"]==70}["value"]
+          dc_identifier_s: "http://hdl.handle.net/#{handle}",
+          layer_slug_s: layer_slug,
+          dc_title_s: create_value(lbfields,70),
+          solr_geom: create_envelope(lbfields),
+          dct_provenance_s: "Yale",
+          dc_rights_s: create_rights(lbfields),
+          dc_description_s: create_value(lbfields,87),
+          dc_creator_sm: create_values(lbfields,69),
+          dc_language_s: create_value(lbfields,84),
+          dc_publisher: create_value(lbfields,69),
+          dc_subject_sm: create_values(lbfields,90),
       }
       solr_json
     end
@@ -101,5 +120,70 @@ module GeoblMethods
     #dct_issued_dt now() ?
     #
     #is_part_of? layer_level
+
+    def create_envelope(lbfields)
+      return unless lbfields.find { |x| x["fdid"]==290} &&
+          lbfields.find { |x| x["fdid"]==291} &&
+          lbfields.find { |x| x["fdid"]==292} &&
+          lbfields.find { |x| x["fdid"]==293}
+      "ENVELOPE(#{lbfields.find { |x| x["fdid"]==290}["value"]}," +
+            "#{lbfields.find { |x| x["fdid"]==291}["value"]}," +
+            "#{lbfields.find { |x| x["fdid"]==292}["value"]}," +
+            "#{lbfields.find { |x| x["fdid"]==292}["value"]})"
+    end
+
+    def create_rights(lbfields)
+      return unless lbfields.find { |x| x["fdid"]==180}
+      if lbfields.find { |x| x["fdid"]==180}["value"] == "Open Access"
+        return "Public"
+      else
+        return "Restricted"
+      end
+    end
+
+    def create_value(lbfields,fdid)
+      return unless lbfields.find { |x| x["fdid"]==fdid}
+      lbfields.find { |x| x["fdid"]==fdid}["value"]
+    end
+
+    def create_values(lbfields,fdid)
+      return unless lbfields.find { |x| x["fdid"]==fdid}
+      fields = lbfields.select { |x| x["fdid"]==fdid}
+      a = Array.new
+      fields.each { |x| a.push(x["value"])}
+      a
+    end
+
+    def document(solr_doc)
+      clean = clean_document(solr_doc)
+      if valid?(clean)
+        clean
+      else
+        schema_errors(clean)
+      end
+    end
+
+    def schema
+      GEOBLACKLIGHT_SCHEMA
+    end
+
+    def valid?(doc)
+      JSON::Validator.validate(schema, doc, fragment: '#/properties/layer')
+    end
+
+    def schema_errors(doc)
+      { error: JSON::Validator.fully_validate(schema, doc, fragment: '#/properties/layer') }
+    end
+
+    def clean_document(hash)
+      hash.delete_if do |_k, v|
+        begin
+          v.nil? || v.empty?
+        rescue
+          false
+        end
+      end
+    end
+
   end
 end

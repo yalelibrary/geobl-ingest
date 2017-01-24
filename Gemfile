@@ -7,6 +7,7 @@ gem 'json', '~> 2'
 
 gem "savon"
 gem "rsolr"
+gem 'json-schema', '>= 2.6.2'
 
 # Bundle edge Rails instead: gem 'rails', github: 'rails/rails'
 gem 'rails', '~> 5.0.1'
