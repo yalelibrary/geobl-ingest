@@ -19,3 +19,4 @@
 .env.db
 .env.web
 config/*.yml
+.idea/*
