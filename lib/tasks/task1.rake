@@ -35,7 +35,7 @@ namespace :lb2geo do
 
   desc "create geoblacklight schema for test"
   task :create_geobl_schema do
-    GeoblMethods.process_simple(1)
+    GeoblMethods.process_simple(1,"test")
   end
 
   #TODO GITHUB name and upload
