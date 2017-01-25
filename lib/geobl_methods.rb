@@ -12,10 +12,27 @@ module GeoblMethods
       get_md = GetLadybirdMetadata.new(go.oid)
       #get_md.print_results(get_md.concat_results)
       solr_doc = get_md.create_solr(get_md.concat_results,get_md.get_geoobject,environ)
-      puts "json: #{solr_doc.inspect}"
-      #puts "json: #{get_md.document(solr_doc).inspect}"
+      #puts "json: #{solr_doc.inspect}"
+      doc = get_md.document(solr_doc)
+      puts "json: #{doc.inspect}"
+      File.open("#{EFSVolume}/#{go.oid}.json", 'w') { |file| file.write(doc) } if doc[:error] == nil
+      get_md.ingest_to_solr(doc) if doc[:error] == nil
+      #TODO copy jp2 to volume (efs)
+      #TODO create and persist MODS (s3)
     end
   end
+
+  def self.process_simple_tracking(level,environ)
+    Geoobject.where(level: level, processed: nil).order(:orig_date).limit(2).each do |go|
+    #Geoobject.where(level: level, processed: nil).order(:orig_date).find_each do |go|
+      puts "processing #{go.oid}"
+      get_md = GetLadybirdMetadata.new(go.oid)
+      solr_doc = get_md.create_solr(get_md.concat_results,get_md.get_geoobject,environ)
+      doc = get_md.document(solr_doc)
+      get_md.complete_db_record(doc,go)
+    end
+  end
+
   class GetLadybirdMetadata
     attr_accessor :oid
     attr_accessor :strings
@@ -69,6 +86,18 @@ module GeoblMethods
       end
     end
 
+    def complete_db_record(doc,go)
+      if doc[:error]
+        puts "error: #{doc.inspect}"
+        go.error = doc[:error]
+        go.processed = "error"
+      else
+        puts "okkkk: #{doc.inspect}"
+        go.processed = "success"
+      end
+      go.save!
+    end
+
     def create_solr(lbfields,go,environ)
       if environ == "test"
         handle = go.test_handle
@@ -81,7 +110,7 @@ module GeoblMethods
       solr_json = {
           geoblacklight_version: "1.0",
           dc_identifier_s: "http://hdl.handle.net/#{handle}",
-          layer_slug_s: layer_slug,
+          layer_slug_s: "yale-abcd",
           dc_title_s: create_value(lbfields,70),
           solr_geom: create_envelope(lbfields),
           dct_provenance_s: "Yale",
@@ -89,15 +118,16 @@ module GeoblMethods
           dc_description_s: create_value(lbfields,87),
           dc_creator_sm: create_values(lbfields,69),
           dc_language_s: create_value(lbfields,84),
-          dc_publisher: create_value(lbfields,69),
+          dc_publisher_s: create_value(lbfields,69),
           dc_subject_sm: create_values(lbfields,90),
           dct_spatial_sm: create_spatial(lbfields),
           dct_temporal_sm: create_values(lbfields,79),
-          layer_modified_dt: go.orig_date.strftime('%Y-%m-%dT%H-%M-%SZ'),
+          layer_modified_dt: DateTime.parse(go.orig_date.to_s).utc.strftime('%FT%TZ'),
           layer_id_s: handle,
           dct_references_s: create_dct_references(go),
-          dc_format_s: create_value(lbfields,157),
-          dct_issued_dt: Time.now.strftime('%Y-%m-%dT%H-%M-%SZ')
+          layer_geom_type_s: create_layer_geom_type(lbfields),
+          dc_format_s: create_layer_geom_type(lbfields),
+          dct_issued_dt: DateTime.parse(Time.now.to_s).utc.strftime('%FT%TZ')
       }
       solr_json
     end
@@ -127,6 +157,12 @@ module GeoblMethods
     #dct_issued_dt now() ?
     #
     #is_part_of? layer_level
+
+    def ingest_to_solr(doc)
+      solr = RSolr.connect :url => SolrGeoblacklight
+      solr.add doc
+      solr.commit
+    end
 
     def create_envelope(lbfields)
       return unless lbfields.find { |x| x["fdid"]==290} &&
@@ -171,10 +207,19 @@ module GeoblMethods
     end
 
     def create_dct_references(go)
-      iiif = "http://myiiifserver"
+      iiif = "http://libimages.princeton.edu/loris2/pudl0001%2F5138415%2F00000011.jp2/info.json"
       schema_url = "http://myurl"
       mods = "http://mymods"
       "{\"http://iiif.io/api/image\":\"#{iiif}\",\"http://schema.org/url\":\"#{schema_url}\",\"http://www.loc.gov/mods/v3\":\"#{mods}\"}"
+    end
+
+    def create_layer_geom_type(lbfields)
+      return unless lbfields.find { |x| x["fdid"]==99}
+      if lbfields.find { |x| x["fdid"]==99}["value"] == "cartographic"
+        return "Scanned Map"
+      else
+        return lbfields.find { |x| x["fdid"]==99}["value"]
+      end
     end
 
     def document(solr_doc)

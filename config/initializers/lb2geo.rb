@@ -21,3 +21,7 @@ HandleBase = config.fetch("handle_test_credential").strip
 
 ::SavonProdClient = Savon.client(wsdl: HandleProdWsdl)
 ::SavonTestClient = Savon.client(wsdl: HandleTestWsdl)
+
+EFSVolume = config.fetch("efs_volume").strip
+
+SolrGeoblacklight = config.fetch("solr_geoblacklight").strip

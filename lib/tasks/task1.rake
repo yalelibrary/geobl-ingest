@@ -38,6 +38,11 @@ namespace :lb2geo do
     GeoblMethods.process_simple(1,"test")
   end
 
+  desc "create geoblacklight schema for prod"
+  task :create_geobl_schema_tracking do
+    GeoblMethods.process_simple_tracking(1,"prod")
+  end
+
   #TODO GITHUB name and upload
   #TODO handles
 
