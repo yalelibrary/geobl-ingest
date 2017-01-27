@@ -1,39 +1,31 @@
 require 'json-schema'
 require 'open-uri'
+require 'fileutils'
 #rake lb2geo:create_geobl_schema
 module GeoblMethods
 
   def self.process_simple(level,environ)
     #see find_each vs each(w/limit)
     #http://www.webascender.com/Blog/ID/553/Rails-Tips-for-Speeding-up-ActiveRecord-Queries#.WIacqrGZO1s
-    Geoobject.where(level: level).order(:orig_date).limit(2).each do |go|
-    #Geoobject.where(level: level).order(:orig_date).find_each do |go|
+    #Geoobject.where(level: level).order(:orig_date).limit(2).each do |go|
+    Geoobject.where(level: level).order(:orig_date).find_each do |go|
       puts "processing #{go.oid}"
-      get_md = GetLadybirdMetadata.new(go.oid)
-      #get_md.print_results(get_md.concat_results)
-      solr_doc = get_md.create_solr(get_md.concat_results,get_md.get_geoobject,environ)
-      #puts "json: #{solr_doc.inspect}"
-      doc = get_md.document(solr_doc)
+      lmd = LadybirdMetadata.new(go.oid)
+      #get_md.print_results(lmd.concat_results)
+      solr_doc = lmd.create_solr(lmd.concat_results,lmd.get_geoobject,environ)
+      doc = lmd.document(solr_doc)
       puts "json: #{doc.inspect}"
-      File.open("#{EFSVolume}/#{go.oid}.json", 'w') { |file| file.write(doc) } if doc[:error] == nil
-      get_md.ingest_to_solr(doc) if doc[:error] == nil
-      #TODO copy jp2 to volume (efs)
+      lmd.process_gbl_json(lmd,doc,go)
+      #TODO up/exec/run create_geobl_schema
+      #TODO check solr, check gbl for simple objects, check dir structure for json
+      #TODO push to github, and document
+      #TODO lightning talk
+      #TODO copy jp2 to s3 (create bucket/download tools)->get a iiif server
       #TODO create and persist MODS (s3)
     end
   end
 
-  def self.process_simple_tracking(level,environ)
-    Geoobject.where(level: level, processed: nil).order(:orig_date).limit(2).each do |go|
-    #Geoobject.where(level: level, processed: nil).order(:orig_date).find_each do |go|
-      puts "processing #{go.oid}"
-      get_md = GetLadybirdMetadata.new(go.oid)
-      solr_doc = get_md.create_solr(get_md.concat_results,get_md.get_geoobject,environ)
-      doc = get_md.document(solr_doc)
-      get_md.complete_db_record(doc,go)
-    end
-  end
-
-  class GetLadybirdMetadata
+  class LadybirdMetadata
     attr_accessor :oid
     attr_accessor :strings
     attr_accessor :lstrings
@@ -86,31 +78,37 @@ module GeoblMethods
       end
     end
 
-    def complete_db_record(doc,go)
-      if doc[:error]
-        puts "error: #{doc.inspect}"
+    def process_gbl_json(lmd,doc,go)
+      if doc[:error] == nil
+        ptdir = "#{EFSVolume}/#{go.oid.to_s[0,2]}/#{go.oid.to_s[2,2]}/#{go.oid.to_s[4,2]}/"
+        FileUtils::mkdir_p ptdir
+        File.open("#{ptdir}/#{go.oid}.json", 'w') { |file| file.write(doc) }
+        lmd.ingest_to_solr(doc)
+        go.processed = "success"
+      else
         go.error = doc[:error]
         go.processed = "error"
-      else
-        puts "okkkk: #{doc.inspect}"
-        go.processed = "success"
       end
       go.save!
     end
 
     def create_solr(lbfields,go,environ)
-      if environ == "test"
-        handle = go.test_handle
-      elsif environ == "prod"
-        handle = go.prod_handle
-      end
-      if handle
-        layer_slug = "yale-#{handle.split("/")[1]}" if handle
-      end
+      #note: commented out as not using handle as id
+      #if environ == "test"
+      #  handle = go.test_handle
+      #elsif environ == "prod"
+      #  handle = go.prod_handle
+      #end
+      #if handle
+      #  layer_slug = "yale-#{handle.split("/")[1]}" if handle
+      #end
+      oid = go.oid
+
       solr_json = {
           geoblacklight_version: "1.0",
-          dc_identifier_s: "http://hdl.handle.net/#{handle}",
-          layer_slug_s: "yale-abcd",
+          #dc_identifier_s: "http://hdl.handle.net/#{handle}",
+          dc_identifier_s: "urn:yale:oid:#{oid}",
+          layer_slug_s: "yale-#{oid}",
           dc_title_s: create_value(lbfields,70),
           solr_geom: create_envelope(lbfields),
           dct_provenance_s: "Yale",
@@ -123,16 +121,17 @@ module GeoblMethods
           dct_spatial_sm: create_spatial(lbfields),
           dct_temporal_sm: create_values(lbfields,79),
           layer_modified_dt: DateTime.parse(go.orig_date.to_s).utc.strftime('%FT%TZ'),
-          layer_id_s: handle,
+          layer_id_s: "yale:#{oid}",
           dct_references_s: create_dct_references(go),
           layer_geom_type_s: create_layer_geom_type(lbfields),
           dc_format_s: create_layer_geom_type(lbfields),
-          dct_issued_dt: DateTime.parse(Time.now.to_s).utc.strftime('%FT%TZ')
+          dct_issued_dt: DateTime.parse(Time.now.to_s).utc.strftime('%FT%TZ'),
+          parent_oid_i: go._oid,
+          zindex_i: go.zindex
       }
       solr_json
     end
-    #response.find {|x| x['label'] == 'cat' }
-    #http://stackoverflow.com/questions/3419050/ruby-select-a-hash-from-inside-an-array
+    #mapping comments:
     #https://github.com/geoblacklight/geoblacklight/wiki/Schema#external-services
     #https://github.com/projecthydra-labs/geo_concerns/blob/master/app/services/geo_concerns/discovery/geoblacklight_document.rb
     #dc_identifier_s http://hdl.handle.net/10079.1/31zg5jv
@@ -207,6 +206,7 @@ module GeoblMethods
     end
 
     def create_dct_references(go)
+      #fake variables to be replaced with real values
       iiif = "http://libimages.princeton.edu/loris2/pudl0001%2F5138415%2F00000011.jp2/info.json"
       schema_url = "http://myurl"
       mods = "http://mymods"

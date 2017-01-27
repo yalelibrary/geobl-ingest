@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20170115221835) do
+ActiveRecord::Schema.define(version: 20170126164031) do
 
   create_table "geoobjects", force: :cascade, options: "ENGINE=InnoDB DEFAULT CHARSET=latin1" do |t|
     t.integer  "oid"
@@ -27,6 +27,7 @@ ActiveRecord::Schema.define(version: 20170115221835) do
     t.string   "processed"
     t.datetime "created_at",                       null: false
     t.datetime "updated_at",                       null: false
+    t.integer  "zindex"
   end
 
 end

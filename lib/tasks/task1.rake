@@ -43,8 +43,8 @@ namespace :lb2geo do
     GeoblMethods.process_simple_tracking(1,"prod")
   end
 
-  #TODO GITHUB name and upload
-  #TODO handles
+  #to clear solr:
+  #curl http://gblsolr:8983/solr/geoblacklight/update?stream.body=<delete><query>*:*</query></delete>&commit=true
 
   #methods
 
@@ -59,7 +59,7 @@ namespace :lb2geo do
   end
 
   def get_c12_and_hydra_id(startdate)
-    ds = SQLServer.execute(%Q/select a.oid, a._oid, b.date, b.hydraID, b.hcmid
+    ds = SQLServer.execute(%Q/select a.oid, a._oid, b.date, b.hydraID, b.hcmid, a._zindex
       from c12 as a, hydra_publish as b
       where a.oid=b.oid and b.action = 'insert' and a.date > '#{startdate}'
       order by a._oid, b.date/)
@@ -79,6 +79,7 @@ namespace :lb2geo do
       go.orig_date = i["date"]
       go.pid = i["hydraID"]
       go.level = i["hcmid"]
+      go.zindex = i["_zindex"]
       go.save!
       puts "saved oid #{go.oid}"
     end
