@@ -16,12 +16,9 @@ module GeoblMethods
       doc = lmd.document(solr_doc)
       puts "json: #{doc.inspect}"
       lmd.process_gbl_json(lmd,doc,go)
-      #TODO up/exec/run create_geobl_schema
-      #TODO check solr, check gbl for simple objects, check dir structure for json
-      #TODO push to github, and document
-      #TODO lightning talk
-      #TODO copy jp2 to s3 (create bucket/download tools)->get a iiif server
-      #TODO create and persist MODS (s3)
+      lmd.save_from_fedora(go.oid,go.pid) if doc[:error] == nil
+      #TODO copy mods from ./efs to s3
+      #TODO copy jp2 from share to s3 (create bucket/download tools)->get a iiif server
     end
   end
 
@@ -82,7 +79,7 @@ module GeoblMethods
       if doc[:error] == nil
         ptdir = "#{EFSVolume}/#{go.oid.to_s[0,2]}/#{go.oid.to_s[2,2]}/#{go.oid.to_s[4,2]}/"
         FileUtils::mkdir_p ptdir
-        File.open("#{ptdir}/#{go.oid}.json", 'w') { |file| file.write(doc) }
+        File.open("#{ptdir}/#{go.oid}-gbl.json", 'w') { |file| file.write(doc) }
         lmd.ingest_to_solr(doc)
         go.processed = "success"
       else
@@ -221,6 +218,17 @@ module GeoblMethods
         return lbfields.find { |x| x["fdid"]==99}["value"]
       end
     end
+
+    def save_from_fedora(oid,pid)
+      ptdir = "#{EFSVolume}/#{oid.to_s[0,2]}/#{oid.to_s[2,2]}/#{oid.to_s[4,2]}/"
+      FileUtils::mkdir_p ptdir
+      open("#{ptdir}/#{oid}-mods.xml", "wb") do |file|
+        open("#{Fedora}/fedora/objects/#{pid}/datastreams/descMetadata/content") do |uri|
+          file.write(uri.read)
+        end
+      end
+    end
+
 
     def document(solr_doc)
       clean = clean_document(solr_doc)

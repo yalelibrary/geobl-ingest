@@ -25,3 +25,8 @@ HandleBase = config.fetch("handle_test_credential").strip
 EFSVolume = config.fetch("efs_volume").strip
 
 SolrGeoblacklight = config.fetch("solr_geoblacklight").strip
+
+Fedora = config.fetch("findit_fedora").strip
+
+JP2Volume = config.fetch("jp2_volume").strip
+
