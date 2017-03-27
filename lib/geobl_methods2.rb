@@ -4,46 +4,74 @@ require 'fileutils'
 #rake lb2geo:create_geobl_schema
 module GeoblMethods2
 
-  def self.process_simple(level,environ)
+  def self.process(level,environ)
     #see find_each vs each(w/limit)
     #http://www.webascender.com/Blog/ID/553/Rails-Tips-for-Speeding-up-ActiveRecord-Queries#.WIacqrGZO1s
-    #Geoobject.where(level: level).order(:orig_date).limit(2).each do |go|
-    Geoobject.where(level: level).order(:orig_date).find_each do |go|
+    Geoobject.where(level: level).order(:orig_date).limit(3).each do |go|
+    #Geoobject.where(level: level).order(:orig_date).find_each do |go|
       puts "processing #{go.oid}"
-      lmd = LadybirdMetadata.new(go.oid)
-      #get_md.print_results(lmd.concat_results)
-      solr_doc = lmd.create_solr(lmd.concat_results,lmd.get_geoobject,environ)
-      doc = lmd.document(solr_doc)
-      puts "json: #{doc.inspect}"
-      lmd.process_gbl_json(lmd,doc,go)
-      lmd.save_from_fedora(go.oid,go.pid) if doc[:error] == nil
+      lmd = LadybirdMetadata.new(go)
+      lmd.set_returned(lmd)
+      lmd.print_results("OID",lmd.oid_returned)
+      lmd.print_results("parentOID",lmd._oid_returned)
+      #solr_doc = lmd.create_solr(lmd.concat_results,lmd.get_geoobject,environ)
+      #doc = lmd.document(solr_doc)
+      #puts "json: #{doc.inspect}"
+      #lmd.process_gbl_json(lmd,doc,go)
+      #lmd.save_from_fedora(go.oid,go.pid) if doc[:error] == nil
+      #TODO test level=2 and 3 print results
+      #TODO logic for level=2 and 3  & test solr and dir output
       #TODO copy mods from ./efs to s3
       #TODO copy jp2 from share to s3 (create bucket/download tools)->get a iiif server
+      #TODO setup dct references
+      #TODO rake task for only fixing dct references
+      #TODO run all of c12
+      #TODO move to AWS
     end
   end
 
   class LadybirdMetadata
     attr_accessor :oid
-    attr_accessor :strings
-    attr_accessor :lstrings
-    attr_accessor :acids
+    attr_accessor :_oid
+    attr_accessor :oid_returned
+    attr_accessor :_oid_returned
 
     GEOBLACKLIGHT_RELEASE_VERSION = 'v1.1.2'.freeze
     GEOBLACKLIGHT_SCHEMA = JSON.parse(open("https://raw.githubusercontent.com/geoblacklight/geoblacklight/#{GEOBLACKLIGHT_RELEASE_VERSION}/schema/geoblacklight-schema.json").read).freeze
 
-    def initialize(oid)
-      @oid = oid
-      @strings = "select a.handle, b.fdid,b.value " +
+    def initialize(go)
+      @oid = go.oid
+      @_oid = go._oid
+      #puts "OID #{@oid}"
+      #puts "_OID #{@_oid}"
+    end
+
+    def set_returned(lmd)
+      @oid_returned = lmd.returned(lmd,@oid)
+      if @_oid == 0
+        @_oid_returned = Array.new
+      else
+        @_oid_returned = lmd.returned(lmd,@_oid)
+      end
+    end
+
+    def returned(lmd,oid)
+      strings = "select a.handle, b.fdid,b.value " +
           "from field_definition a, c12_strings b " +
-          "where oid = #{@oid} and a.fdid=b.fdid order by handle"
+          "where oid = #{oid} and a.fdid=b.fdid order by handle"
 
-      @lstrings = "select a.handle, b.fdid,b.value " +
+      lstrings = "select a.handle, b.fdid,b.value " +
           "from field_definition a, c12_longstrings b " +
-          "where oid = #{@oid} and a.fdid=b.fdid order by handle"
+          "where oid = #{oid} and a.fdid=b.fdid order by handle"
 
-      @acids = "select a.handle, b.fdid,c.value " +
+      acids = "select a.handle, b.fdid,c.value " +
           "from field_definition a, c12_acid b, acid c " +
-          "where oid = #{@oid} and a.fdid=b.fdid and b.acid = c.acid order by handle"
+          "where oid = #{oid} and a.fdid=b.fdid and b.acid = c.acid order by handle"
+      strings_returned = lmd.get_results(strings)
+      lstrings_returned = lmd.get_results(lstrings)
+      acids_returned = lmd.get_results(acids)
+      all_returned = strings_returned + lstrings_returned + acids_returned
+      all_returned
     end
 
     def get_geoobject
@@ -61,15 +89,8 @@ module GeoblMethods2
       dsArr
     end
 
-    def concat_results
-      strings_returned = get_results(@strings)
-      lstrings_returned = get_results(@lstrings)
-      acids_returned = get_results(@acids)
-      all_returned = strings_returned + lstrings_returned + acids_returned
-    end
-
-    def print_results(all_returned)
-      puts "----"
+    def print_results(type,all_returned)
+      puts "#{type}----"
       all_returned.each do |val|
         puts " obj: #{val.inspect}"
       end

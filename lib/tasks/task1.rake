@@ -1,6 +1,6 @@
 require Rails.root.join('config/environment.rb')
 require Rails.root.join('lib/handle_methods.rb')
-require Rails.root.join('lib/geobl_methods.rb')
+require Rails.root.join('lib/geobl_methods2.rb')
 Rails.logger = Logger.new("#{Rails.root}/log/ingest.log",10,200.megabytes)
 Rails.logger.formatter = Logger::Formatter.new
 #docker-compose run web rake lb2geo:get_c12_count
@@ -35,7 +35,7 @@ namespace :lb2geo do
 
   desc "create geoblacklight schema for test"
   task :create_geobl_schema do
-    GeoblMethods.process_simple(1,"test")
+    GeoblMethods2.process(1,"test")
   end
 
   desc "create geoblacklight schema for prod"
