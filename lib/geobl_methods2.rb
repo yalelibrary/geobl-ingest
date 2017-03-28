@@ -14,12 +14,13 @@ module GeoblMethods2
       lmd.set_returned(lmd)
       lmd.print_results("OID",lmd.oid_returned)
       lmd.print_results("parentOID",lmd._oid_returned)
+      lmd.save_string(go.oid,lmd.json_results("OID",lmd.oid_returned))
       #solr_doc = lmd.create_solr(lmd.concat_results,lmd.get_geoobject,environ)
       #doc = lmd.document(solr_doc)
       #puts "json: #{doc.inspect}"
       #lmd.process_gbl_json(lmd,doc,go)
       #lmd.save_from_fedora(go.oid,go.pid) if doc[:error] == nil
-      #TODO test level=2 and 3 print results
+      #TODO public vs private iiif s3
       #TODO logic for level=2 and 3  & test solr and dir output
       #TODO copy mods from ./efs to s3
       #TODO copy jp2 from share to s3 (create bucket/download tools)->get a iiif server
@@ -89,11 +90,24 @@ module GeoblMethods2
       dsArr
     end
 
-    def print_results(type,all_returned)
-      puts "#{type}----"
+    def print_results(result_type,all_returned)
+      puts "#{result_type}----"
       all_returned.each do |val|
-        puts " obj: #{val.inspect}"
+        puts "#{val.inspect}"
       end
+    end
+
+    def json_results(type,all_returned)
+      res = String.new
+      res << "{"
+      all_returned.each do |val|
+        str = "\"#{val["handle"]}\" : { \"fdid\" : \"#{val["fdid"]}\", \"value\" : \"#{val["value"]}\"},"
+        res << str
+      end
+      res.chop!
+      res << "}"
+      #puts "#{res}"
+      res
     end
 
     def process_gbl_json(lmd,doc,go)
@@ -250,13 +264,20 @@ module GeoblMethods2
     end
 
     def save_from_fedora(oid,pid)
-      ptdir = "#{EFSVolume}/#{oid.to_s[0,2]}/#{oid.to_s[2,2]}/#{oid.to_s[4,2]}/"
+      ptdir = "#{EFSVolume}/oid/#{oid.to_i % 256}"
       FileUtils::mkdir_p ptdir
       open("#{ptdir}/#{oid}-mods.xml", "wb") do |file|
         open("#{Fedora}/fedora/objects/#{pid}/datastreams/descMetadata/content") do |uri|
           file.write(uri.read)
         end
       end
+    end
+
+    def save_string(oid,str)
+      ptdir = "#{EFSVolume}/oid/#{oid.to_i % 256}"
+      FileUtils::mkdir_p ptdir
+      #puts "ptdir: #{ptdir}"
+      File.open("#{ptdir}/#{oid}-ladybird.txt", 'w') { |file| file.write(str) }
     end
 
 

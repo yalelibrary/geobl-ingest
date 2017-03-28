@@ -36,6 +36,8 @@ namespace :lb2geo do
   desc "create geoblacklight schema for test"
   task :create_geobl_schema do
     GeoblMethods2.process(1,"test")
+    #GeoblMethods2.process(2,"test")
+    #GeoblMethods2.process(3,"test")
   end
 
   desc "create geoblacklight schema for prod"
