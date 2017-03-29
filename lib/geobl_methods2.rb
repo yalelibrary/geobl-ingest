@@ -12,15 +12,18 @@ module GeoblMethods2
       puts "processing #{go.oid}"
       lmd = LadybirdMetadata.new(go)
       lmd.set_returned(lmd)
-      lmd.print_results("OID",lmd.oid_returned)
-      lmd.print_results("parentOID",lmd._oid_returned)
+      #lmd.print_results("OID",lmd.oid_returned)
+      #lmd.print_results("parentOID",lmd._oid_returned)
       lmd.save_string(go.oid,lmd.json_results("OID",lmd.oid_returned))
-      #lmd.create_volume_envelope(lmd,go.oid) #just to test
+      lmd.save_mods(go.oid,go.pid)
+      lmd.save_jp2(go.oid,go.pid,level)
+      #TODO copy to s3
+      #TODO get ladybird, mods, jp2 s3 paths using if get_rights(lmd,go) == "Public"
       solr_doc = lmd.processto_solr(lmd,lmd.oid_returned,lmd._oid_returned,lmd.get_geoobject,environ)
       doc = lmd.document(solr_doc)
       puts "json: #{doc.inspect}"
-      lmd.process_gbl_json(lmd,doc,go)
-      #lmd.save_from_fedora(go.oid,go.pid) if doc[:error] == nil
+      lmd.process_gbl_json(lmd,doc,go) #if doc[:error] == nil
+      puts "directory: #{EFSVolume}/oid/#{go.oid.to_i % 256}"
       #TODO public vs private iiif s3
       #TODO copy mods from ./efs to s3
       #TODO copy jp2 from share to s3 (create bucket/download tools)->get a iiif server (Open Access, Yale Community Only)
@@ -326,6 +329,15 @@ module GeoblMethods2
       end
     end
 
+    def get_rights(lmd,go)
+      if go.level == 1 || go.level == 2
+        rights = create_rights(lmd.oid_returned)
+      elsif go.level == 3
+        rights = create_rights(lmd._oid_returned)
+      end
+      rights #Public or Restricted
+    end
+
     def create_value(lbfields,fdid)
       return unless lbfields.find { |x| x["fdid"]==fdid}
       lbfields.find { |x| x["fdid"]==fdid}["value"]
@@ -365,11 +377,34 @@ module GeoblMethods2
       end
     end
 
-    def save_from_fedora(oid,pid)
+    def save_mods(oid,pid)
       ptdir = "#{EFSVolume}/oid/#{oid.to_i % 256}"
+      return unless File.exist?("#{ptdir}/#{oid}-mods.xml") == false
       FileUtils::mkdir_p ptdir
       open("#{ptdir}/#{oid}-mods.xml", "wb") do |file|
         open("#{Fedora}/fedora/objects/#{pid}/datastreams/descMetadata/content") do |uri|
+          file.write(uri.read)
+        end
+      end
+    end
+
+    def save_jp2(oid,pid,level)
+      ptdir = "#{EFSVolume}/oid/#{oid.to_i % 256}"
+      return unless File.exist?("#{ptdir}/#{oid}.jp2") == false
+      #url = URI.parse("#{Fedora}/fedora/objects/#{pid}/datastreams/jp2/content")
+      #req = Net::HTTP.new(url.host, url.port)
+      #res = req.request_head(url.path)
+      #if res.code != "200"
+      #  puts "no jp2 for #{oid} #{pid} with http #{res.code}"
+      #  return
+      #end
+      if level == 2
+        puts "volume parent no jp2"
+        return
+      end
+      FileUtils::mkdir_p ptdir
+      open("#{ptdir}/#{oid}.jp2", "wb") do |file|
+        open("#{Fedora}/fedora/objects/#{pid}/datastreams/jp2/content") do |uri|
           file.write(uri.read)
         end
       end
