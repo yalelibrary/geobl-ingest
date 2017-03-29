@@ -15,15 +15,16 @@ module GeoblMethods2
       lmd.print_results("OID",lmd.oid_returned)
       lmd.print_results("parentOID",lmd._oid_returned)
       lmd.save_string(go.oid,lmd.json_results("OID",lmd.oid_returned))
-      #solr_doc = lmd.create_solr(lmd.concat_results,lmd.get_geoobject,environ)
-      #doc = lmd.document(solr_doc)
-      #puts "json: #{doc.inspect}"
-      #lmd.process_gbl_json(lmd,doc,go)
+      #lmd.create_volume_envelope(lmd,go.oid) #just to test
+      solr_doc = lmd.processto_solr(lmd,lmd.oid_returned,lmd._oid_returned,lmd.get_geoobject,environ)
+      doc = lmd.document(solr_doc)
+      puts "json: #{doc.inspect}"
+      lmd.process_gbl_json(lmd,doc,go)
       #lmd.save_from_fedora(go.oid,go.pid) if doc[:error] == nil
       #TODO public vs private iiif s3
-      #TODO logic for level=2 and 3  & test solr and dir output
+      #TODO logic for level=2 and 3  & test solr and dir output, start w/ unit test of create_volume_envelope
       #TODO copy mods from ./efs to s3
-      #TODO copy jp2 from share to s3 (create bucket/download tools)->get a iiif server
+      #TODO copy jp2 from share to s3 (create bucket/download tools)->get a iiif server (Open Access, Yale Community Only)
       #TODO setup dct references
       #TODO rake task for only fixing dct references
       #TODO run all of c12
@@ -112,7 +113,7 @@ module GeoblMethods2
 
     def process_gbl_json(lmd,doc,go)
       if doc[:error] == nil
-        ptdir = "#{EFSVolume}/#{go.oid.to_s[0,2]}/#{go.oid.to_s[2,2]}/#{go.oid.to_s[4,2]}/"
+        ptdir = "#{EFSVolume}/oid/#{oid.to_i % 256}"
         FileUtils::mkdir_p ptdir
         File.open("#{ptdir}/#{go.oid}-gbl.json", 'w') { |file| file.write(doc) }
         lmd.ingest_to_solr(doc)
@@ -124,7 +125,7 @@ module GeoblMethods2
       go.save!
     end
 
-    def create_solr(lbfields,go,environ)
+    def processto_solr(lmd,lbfields,lbfields_parent,go,environ)
       #note: commented out as not using handle as id
       #if environ == "test"
       #  handle = go.test_handle
@@ -135,12 +136,14 @@ module GeoblMethods2
       #  layer_slug = "yale-#{handle.split("/")[1]}" if handle
       #end
       oid = go.oid
+      level = go.level
 
-      solr_json = {
+      if level == 1
+        solr_json = {
           geoblacklight_version: "1.0",
           #dc_identifier_s: "http://hdl.handle.net/#{handle}",
           dc_identifier_s: "urn:yale:oid:#{oid}",
-          layer_slug_s: "yale_oid-#{oid}",
+          layer_slug_s: "yale-oid-#{oid}",
           dc_title_s: create_value(lbfields,70),
           solr_geom: create_envelope(lbfields),
           dct_provenance_s: "Yale",
@@ -153,14 +156,46 @@ module GeoblMethods2
           dct_spatial_sm: create_spatial(lbfields),
           dct_temporal_sm: create_values(lbfields,79),
           layer_modified_dt: DateTime.parse(go.orig_date.to_s).utc.strftime('%FT%TZ'),
-          layer_id_s: "yale_oid:#{oid}",
+          layer_id_s: "yale-oid:#{oid}",
           dct_references_s: create_dct_references(go),
           layer_geom_type_s: create_layer_geom_type(lbfields),
           dc_format_s: create_layer_geom_type(lbfields),
           dct_issued_dt: DateTime.parse(Time.now.to_s).utc.strftime('%FT%TZ'),
           parent_oid_i: go._oid,
           zindex_i: go.zindex
-      }
+          #TODO add oid and pid
+        }
+      elsif level == 2
+        solr_json = {
+            geoblacklight_version: "1.0",
+            #dc_identifier_s: "http://hdl.handle.net/#{handle}",
+            dc_identifier_s: "urn:yale:oid:#{oid}",
+            layer_slug_s: "yale-oid-#{oid}",
+            dc_title_s: create_value(lbfields,70),
+            solr_geom: create_volume_envelope(lmd,oid), #
+            dct_provenance_s: "Yale",
+            dc_rights_s: create_rights(lbfields),
+            dc_description_s: create_value(lbfields,87),
+            dc_creator_sm: create_values(lbfields,69),
+            dc_language_s: create_value(lbfields,84),
+            dc_publisher_s: create_value(lbfields,69),
+            dc_subject_sm: create_values(lbfields,90),
+            dct_spatial_sm: create_spatial(lbfields),
+            dct_temporal_sm: create_values(lbfields,79),
+            layer_modified_dt: DateTime.parse(go.orig_date.to_s).utc.strftime('%FT%TZ'),
+            layer_id_s: "yale-oid:#{oid}",
+            dct_references_s: create_dct_references(go),
+            layer_geom_type_s: create_layer_geom_type(lbfields),
+            dc_format_s: create_layer_geom_type(lbfields),
+            dct_issued_dt: DateTime.parse(Time.now.to_s).utc.strftime('%FT%TZ'),
+            hydra_id_s: go.pid,
+            oid_i: go.oid,
+            parent_oid_i: go._oid,
+            zindex_i: go.zindex
+        }
+      elsif level == 3
+      end
+
       solr_json
     end
     #mapping comments:
@@ -215,10 +250,36 @@ module GeoblMethods2
             "#{lbfields.find { |x| x["fdid"]==292}["value"]})"
     end
 
+    def create_volume_envelope(lmd,parent_oid)
+      west = "select MAX(a.value) as WEST from c12_strings a, c12 b " +
+          "where a.fdid = 290 and b._oid = #{parent_oid} and a.oid = b.oid"
+      east = "select MIN(a.value) as EAST from c12_strings a, c12 b " +
+          "where a.fdid = 291 and b._oid = #{parent_oid} and a.oid = b.oid"
+      north = "select MAX(a.value) as NORTH from c12_strings a, c12 b " +
+          "where a.fdid = 292 and b._oid = #{parent_oid} and a.oid = b.oid"
+      south = "select MIN(a.value) as SOUTH from c12_strings a, c12 b " +
+          "where a.fdid = 293 and b._oid = #{parent_oid} and a.oid = b.oid"
+      wwest = lmd.get_results(west)[0]["WEST"]
+      eeast = lmd.get_results(east)[0]["EAST"]
+      nnorth = lmd.get_results(north)[0]["NORTH"]
+      ssouth = lmd.get_results(south)[0]["SOUTH"]
+
+      return unless !wwest.nil? && !eeast.nil? && !nnorth.nil? && !ssouth.nil?
+      #puts "WEST #{wwest}"
+      #puts "EAST #{eeast}"
+      #puts "NORTH #{nnorth}"
+      #puts "SOUTH #{ssouth}"
+      envelope = "ENVELOPE(#{wwest},#{eeast},#{nnorth},#{ssouth})"
+      #puts "#{envelope}"
+      return envelope
+    end
+
     def create_rights(lbfields)
       return unless lbfields.find { |x| x["fdid"]==180}
       if lbfields.find { |x| x["fdid"]==180}["value"] == "Open Access"
         return "Public"
+      elsif lbfields.find { |x| x["fdid"]==180}["value"] == "Yale Community Only"
+        return "Restricted"
       else
         return "Restricted"
       end
@@ -259,7 +320,7 @@ module GeoblMethods2
       if lbfields.find { |x| x["fdid"]==99}["value"] == "cartographic"
         return "Scanned Map"
       else
-        return lbfields.find { |x| x["fdid"]==99}["value"]
+        return lbfields.find { |x| x["fdid"]==99}["value"] #note: these(sanborn) should all be scanned maps
       end
     end
 
