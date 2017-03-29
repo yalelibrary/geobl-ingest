@@ -22,7 +22,6 @@ module GeoblMethods2
       lmd.process_gbl_json(lmd,doc,go)
       #lmd.save_from_fedora(go.oid,go.pid) if doc[:error] == nil
       #TODO public vs private iiif s3
-      #TODO logic for level=2 and 3  & test solr and dir output, start w/ unit test of create_volume_envelope
       #TODO copy mods from ./efs to s3
       #TODO copy jp2 from share to s3 (create bucket/download tools)->get a iiif server (Open Access, Yale Community Only)
       #TODO setup dct references
@@ -136,7 +135,10 @@ module GeoblMethods2
       #  layer_slug = "yale-#{handle.split("/")[1]}" if handle
       #end
       oid = go.oid
+      _oid = go.oid
       level = go.level
+      zindex = go.zindex
+      pid = go.pid
 
       if level == 1
         solr_json = {
@@ -161,9 +163,11 @@ module GeoblMethods2
           layer_geom_type_s: create_layer_geom_type(lbfields),
           dc_format_s: create_layer_geom_type(lbfields),
           dct_issued_dt: DateTime.parse(Time.now.to_s).utc.strftime('%FT%TZ'),
-          parent_oid_i: go._oid,
-          zindex_i: go.zindex
-          #TODO add oid and pid
+          oid_i: oid,
+          parent_oid_i: _oid,
+          zindex_i: zindex,
+          lblevel_i: level,
+          hydra_id_s: pid
         }
       elsif level == 2
         solr_json = {
@@ -188,12 +192,49 @@ module GeoblMethods2
             layer_geom_type_s: create_layer_geom_type(lbfields),
             dc_format_s: create_layer_geom_type(lbfields),
             dct_issued_dt: DateTime.parse(Time.now.to_s).utc.strftime('%FT%TZ'),
-            hydra_id_s: go.pid,
-            oid_i: go.oid,
-            parent_oid_i: go._oid,
-            zindex_i: go.zindex
+            oid_i: oid,
+            parent_oid_i: _oid,
+            zindex_i: zindex,
+            lblevel_i: level,
+            hydra_id_s: pid
         }
       elsif level == 3
+        if is_index_map?(lbfields)
+          solr_geom = create_volume_envelope(lmd,_oid)
+          #puts "creating index map envelope #{solr_geom}"
+        else
+          solr_geom = create_envelope(lbfields)
+          #puts "creating sheet envelope #{solr_geom}"
+        end
+        solr_json = {
+            geoblacklight_version: "1.0",
+            #dc_identifier_s: "http://hdl.handle.net/#{handle}",
+            dc_identifier_s: "urn:yale:oid:#{oid}",
+            layer_slug_s: "yale-oid-#{oid}",
+            dc_title_s: create_value(lbfields_parent,70) + " - " + create_value(lbfields,74), #
+            solr_geom: solr_geom, #
+            dct_provenance_s: "Yale",
+            dc_rights_s: create_rights(lbfields_parent),
+            dc_description_s: create_value(lbfields_parent,87),
+            dc_creator_sm: create_values(lbfields_parent,69),
+            dc_language_s: create_value(lbfields_parent,84),
+            dc_publisher_s: create_value(lbfields_parent,69),
+            dc_subject_sm: create_values(lbfields_parent,90),
+            dct_spatial_sm: create_spatial(lbfields_parent),
+            dct_temporal_sm: create_values(lbfields_parent,79),
+            layer_modified_dt: DateTime.parse(go.orig_date.to_s).utc.strftime('%FT%TZ'),
+            layer_id_s: "yale-oid:#{oid}",
+            dct_references_s: create_dct_references(go),
+            layer_geom_type_s: create_layer_geom_type(lbfields_parent),
+            dc_format_s: create_layer_geom_type(lbfields_parent),
+            dct_issued_dt: DateTime.parse(Time.now.to_s).utc.strftime('%FT%TZ'),
+            oid_i: go.oid,
+            parent_oid_i: go._oid,
+            zindex_i: go.zindex,
+            lblevel_i: go.level,
+            hydra_id_s: go.pid
+        }
+
       end
 
       solr_json
