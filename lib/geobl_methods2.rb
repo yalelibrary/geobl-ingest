@@ -17,19 +17,22 @@ module GeoblMethods2
       lmd.save_string(go.oid,lmd.json_results("OID",lmd.oid_returned))
       lmd.save_mods(go.oid,go.pid)
       lmd.save_jp2(go.oid,go.pid,level)
-      #TODO copy to s3
-      #TODO get ladybird, mods, jp2 s3 paths using if get_rights(lmd,go) == "Public"
-      solr_doc = lmd.processto_solr(lmd,lmd.oid_returned,lmd._oid_returned,lmd.get_geoobject,environ)
+      dctref = Hash.new
+      dctref[:s3_ladybird] = lmd.save_to_s3(go,lmd,"yul_ladybird")
+      dctref[:s3_mods] = lmd.save_to_s3(go,lmd,"yul_mods")
+      dctref[:s3_image] = lmd.save_to_s3(go,lmd,"yul_image") if get_rights(lmd,go) == "Public"
+      dctref[:s3_image] = lmd.save_to_s3(go,lmd,"yul_imagelim") if get_rights(lmd,go) == "Restricted"
+      solr_doc = lmd.processto_solr(lmd,lmd.oid_returned,lmd._oid_returned,lmd.get_geoobject,dctref,environ)
       doc = lmd.document(solr_doc)
       puts "json: #{doc.inspect}"
       lmd.process_gbl_json(lmd,doc,go) #if doc[:error] == nil
       puts "directory: #{EFSVolume}/oid/#{go.oid.to_i % 256}"
-      #TODO public vs private iiif s3
-      #TODO copy jp2 from share to s3 (create bucket/download tools)->get a iiif server (Open Access, Yale Community Only)
-      #TODO setup dct references
-      #TODO rake task for only fixing dct references
+      #TODO test s3 and dctreferences
+      #TODO setup AWS iiif server
+      #TODO setup AWS gblsolr
+      #TODO setup AWS gbl
+      #TODO config to AWS as above
       #TODO run all of c12
-      #TODO move to AWS
     end
   end
 
@@ -126,7 +129,7 @@ module GeoblMethods2
       go.save!
     end
 
-    def processto_solr(lmd,lbfields,lbfields_parent,go,environ)
+    def processto_solr(lmd,lbfields,lbfields_parent,go,dctref,environ)
       #note: commented out as not using handle as id
       #if environ == "test"
       #  handle = go.test_handle
@@ -161,7 +164,7 @@ module GeoblMethods2
           dct_temporal_sm: create_values(lbfields,79),
           layer_modified_dt: DateTime.parse(go.orig_date.to_s).utc.strftime('%FT%TZ'),
           layer_id_s: "yale-oid:#{oid}",
-          dct_references_s: create_dct_references(go),
+          dct_references_s: create_dct_references(go,dctref),
           layer_geom_type_s: create_layer_geom_type(lbfields),
           dc_format_s: create_layer_geom_type(lbfields),
           dct_issued_dt: DateTime.parse(Time.now.to_s).utc.strftime('%FT%TZ'),
@@ -190,7 +193,7 @@ module GeoblMethods2
             dct_temporal_sm: create_values(lbfields,79),
             layer_modified_dt: DateTime.parse(go.orig_date.to_s).utc.strftime('%FT%TZ'),
             layer_id_s: "yale-oid:#{oid}",
-            dct_references_s: create_dct_references(go),
+            dct_references_s: create_dct_references(go,dctref),
             layer_geom_type_s: create_layer_geom_type(lbfields),
             dc_format_s: create_layer_geom_type(lbfields),
             dct_issued_dt: DateTime.parse(Time.now.to_s).utc.strftime('%FT%TZ'),
@@ -226,7 +229,7 @@ module GeoblMethods2
             dct_temporal_sm: create_values(lbfields_parent,79),
             layer_modified_dt: DateTime.parse(go.orig_date.to_s).utc.strftime('%FT%TZ'),
             layer_id_s: "yale-oid:#{oid}",
-            dct_references_s: create_dct_references(go),
+            dct_references_s: create_dct_references(go,dctref),
             layer_geom_type_s: create_layer_geom_type(lbfields_parent),
             dc_format_s: create_layer_geom_type(lbfields_parent),
             dct_issued_dt: DateTime.parse(Time.now.to_s).utc.strftime('%FT%TZ'),
@@ -359,11 +362,13 @@ module GeoblMethods2
       a
     end
 
-    def create_dct_references(go)
-      #fake variables to be replaced with real values
+    def create_dct_references(go,dctref)
+      #fake iii to be replaced with real values
       iiif = "http://libimages.princeton.edu/loris2/pudl0001%2F5138415%2F00000011.jp2/info.json"
-      schema_url = "http://myurl"
-      mods = "http://mymods"
+      iiif_id = dctref[:s3_image].split("/")[4]
+      #iiif = IIIF_URL.gsub("<id>",iiif_id)
+      schema_url = dctref[:s3_ladybird]
+      mods = dctref[:s3_mods]
       "{\"http://iiif.io/api/image\":\"#{iiif}\",\"http://schema.org/url\":\"#{schema_url}\",\"http://www.loc.gov/mods/v3\":\"#{mods}\"}"
     end
 
@@ -414,6 +419,19 @@ module GeoblMethods2
       FileUtils::mkdir_p ptdir
       #puts "ptdir: #{ptdir}"
       File.open("#{ptdir}/#{oid}-ladybird.txt", 'w') { |file| file.write(str) }
+    end
+
+    def save_to_s3(go,lmd,bucket)
+      filename = "-ladybird.txt" if bucket == "yul_ladybird"
+      filename = "-mods.xml" if bucket == "yul_mods"
+      filename = ".jp2" if bucket == "yul_image" || "yul_imagelim"
+      name = File.basename "#{EFSVolume}/oid/#{oid.to_i % 256}/#{oid}#{filename}"
+      obj = s3.bucket(bucket).object(name)
+      obj.upload_file(name)
+      if ["yul_ladybird","yul_mods","yul_image"].include?(bucket)
+        obj.acl.put({acl: "public-read"})
+      end
+      return "https://s3.amazonaws.com/#{bucket}/#{name}"
     end
 
 

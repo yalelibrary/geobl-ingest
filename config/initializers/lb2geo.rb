@@ -33,3 +33,5 @@ JP2Volume = config.fetch("jp2_volume").strip
 Aws.config.update({
   credentials: Aws::Credentials.new(config.fetch("aws_access_key_id").strip,config.fetch("aws_secret_access_key").strip)
 })
+
+IIIF_URL = config.fetch("iiif_endpoint").strip
