@@ -25,7 +25,6 @@ module GeoblMethods2
       lmd.process_gbl_json(lmd,doc,go) #if doc[:error] == nil
       puts "directory: #{EFSVolume}/oid/#{go.oid.to_i % 256}"
       #TODO public vs private iiif s3
-      #TODO copy mods from ./efs to s3
       #TODO copy jp2 from share to s3 (create bucket/download tools)->get a iiif server (Open Access, Yale Community Only)
       #TODO setup dct references
       #TODO rake task for only fixing dct references

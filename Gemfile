@@ -1,5 +1,7 @@
 source 'https://rubygems.org'
 
+gem 'aws-sdk'
+
 gem 'tiny_tds'
 gem 'mysql2'
 
