@@ -20,14 +20,16 @@ module GeoblMethods2
       dctref = Hash.new
       dctref[:s3_ladybird] = lmd.save_to_s3(go,lmd,"yul_ladybird")
       dctref[:s3_mods] = lmd.save_to_s3(go,lmd,"yul_mods")
-      dctref[:s3_image] = lmd.save_to_s3(go,lmd,"yul_image") if get_rights(lmd,go) == "Public"
-      dctref[:s3_image] = lmd.save_to_s3(go,lmd,"yul_imagelim") if get_rights(lmd,go) == "Restricted"
+      dctref[:s3_image] = lmd.save_to_s3(go,lmd,"yul_image") if lmd.get_rights(lmd,go) == "Public" && go.level != 2
+      dctref[:s3_image] = lmd.save_to_s3(go,lmd,"yul_imagelim") if lmd.get_rights(lmd,go) == "Restricted" && go.level != 2
+      dctref[:s3_image] = "" if go.level == 2
       solr_doc = lmd.processto_solr(lmd,lmd.oid_returned,lmd._oid_returned,lmd.get_geoobject,dctref,environ)
       doc = lmd.document(solr_doc)
       puts "json: #{doc.inspect}"
       lmd.process_gbl_json(lmd,doc,go) #if doc[:error] == nil
+      lmd.delete_jp2(go.oid) if go.level != 2
       puts "directory: #{EFSVolume}/oid/#{go.oid.to_i % 256}"
-      #TODO test s3 and dctreferences
+      #TODO test s3 and cleanup bucket and commit code
       #TODO setup AWS iiif server
       #TODO setup AWS gblsolr
       #TODO setup AWS gbl
@@ -125,6 +127,11 @@ module GeoblMethods2
       else
         go.error = doc[:error]
         go.processed = "error"
+      end
+      if go.processed_index.nil?
+        go.processed_index = 1
+      else
+        go.processed_index = go.processed_index + 1
       end
       go.save!
     end
@@ -365,7 +372,7 @@ module GeoblMethods2
     def create_dct_references(go,dctref)
       #fake iii to be replaced with real values
       iiif = "http://libimages.princeton.edu/loris2/pudl0001%2F5138415%2F00000011.jp2/info.json"
-      iiif_id = dctref[:s3_image].split("/")[4]
+      iiif_id = dctref[:s3_image].split("/")[4] if dctref[:s3_image] != ""
       #iiif = IIIF_URL.gsub("<id>",iiif_id)
       schema_url = dctref[:s3_ladybird]
       mods = dctref[:s3_mods]
@@ -379,6 +386,11 @@ module GeoblMethods2
       else
         return lbfields.find { |x| x["fdid"]==99}["value"] #note: these(sanborn) should all be scanned maps
       end
+    end
+
+    def delete_jp2(oid)
+      ptdir = "#{EFSVolume}/oid/#{oid.to_i % 256}"
+      File.delete("#{ptdir}/#{oid}.jp2") if File.exist?("#{ptdir}/#{oid}.jp2")
     end
 
     def save_mods(oid,pid)
@@ -424,13 +436,22 @@ module GeoblMethods2
     def save_to_s3(go,lmd,bucket)
       filename = "-ladybird.txt" if bucket == "yul_ladybird"
       filename = "-mods.xml" if bucket == "yul_mods"
-      filename = ".jp2" if bucket == "yul_image" || "yul_imagelim"
+      filename = ".jp2" if bucket == "yul_image"
+      filename = ".jp2" if bucket == "yul_imagelim"
       name = File.basename "#{EFSVolume}/oid/#{oid.to_i % 256}/#{oid}#{filename}"
-      obj = s3.bucket(bucket).object(name)
-      obj.upload_file(name)
+      obj = S3.bucket(bucket).object(name)
+      obj.upload_file("#{EFSVolume}/oid/#{oid.to_i % 256}/#{oid}#{filename}")
       if ["yul_ladybird","yul_mods","yul_image"].include?(bucket)
         obj.acl.put({acl: "public-read"})
       end
+      #d = Digest::MD5.file "#{EFSVolume}/oid/#{oid.to_i % 256}/#{oid}#{filename}"
+      #if d.hexdigest == obj.metadata['ContentMD5']
+      #  puts "FILE #{EFSVolume}/oid/#{oid.to_i % 256}/#{oid}#{filename} saved to s3"
+      #else
+      #  puts "MD5 ERROR for #{EFSVolume}/oid/#{oid.to_i % 256}/#{oid}#{filename}"
+      #  puts "CALC #{d.hexdigest}"
+      #  puts "AWS #{obj.metadata['ContentMD5']}"
+      #end
       return "https://s3.amazonaws.com/#{bucket}/#{name}"
     end
 
