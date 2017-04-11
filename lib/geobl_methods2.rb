@@ -300,7 +300,7 @@ module GeoblMethods2
       "ENVELOPE(#{lbfields.find { |x| x["fdid"]==290}["value"]}," +
             "#{lbfields.find { |x| x["fdid"]==291}["value"]}," +
             "#{lbfields.find { |x| x["fdid"]==292}["value"]}," +
-            "#{lbfields.find { |x| x["fdid"]==292}["value"]})"
+            "#{lbfields.find { |x| x["fdid"]==293}["value"]})"
     end
 
     def create_volume_envelope(lmd,parent_oid)
