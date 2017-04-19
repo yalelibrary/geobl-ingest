@@ -7,28 +7,40 @@ module GeoblMethods2
   def self.process(level,environ)
     #see find_each vs each(w/limit)
     #http://www.webascender.com/Blog/ID/553/Rails-Tips-for-Speeding-up-ActiveRecord-Queries#.WIacqrGZO1s
-    Geoobject.where(level: level).order(:orig_date).limit(3).each do |go|
-    #Geoobject.where(level: level).order(:orig_date).find_each do |go|
-      puts "processing #{go.oid}"
-      lmd = LadybirdMetadata.new(go)
-      lmd.set_returned(lmd)
-      #lmd.print_results("OID",lmd.oid_returned)
-      #lmd.print_results("parentOID",lmd._oid_returned)
-      lmd.save_string(go.oid,lmd.json_results("OID",lmd.oid_returned))
-      lmd.save_mods(go.oid,go.pid)
-      lmd.save_jp2(go.oid,go.pid,level)
-      dctref = Hash.new
-      dctref[:s3_ladybird] = lmd.save_to_s3(go,lmd,"yul_ladybird")
-      dctref[:s3_mods] = lmd.save_to_s3(go,lmd,"yul_mods")
-      dctref[:s3_image] = lmd.save_to_s3(go,lmd,"yul_image") if lmd.get_rights(lmd,go) == "Public" && go.level != 2
-      dctref[:s3_image] = lmd.save_to_s3(go,lmd,"yul_imagelim") if lmd.get_rights(lmd,go) == "Restricted" && go.level != 2
-      dctref[:s3_image] = "" if go.level == 2
-      solr_doc = lmd.processto_solr(lmd,lmd.oid_returned,lmd._oid_returned,lmd.get_geoobject,dctref,environ)
-      doc = lmd.document(solr_doc)
-      puts "json: #{doc.inspect}"
-      lmd.process_gbl_json(lmd,doc,go) #if doc[:error] == nil
-      lmd.delete_jp2(go.oid) if go.level != 2
-      puts "directory: #{EFSVolume}/oid/#{go.oid.to_i % 256}"
+    #Geoobject.where(level: level).order(:orig_date).limit(3).each do |go|
+    Geoobject.where(level: level).order(:orig_date).find_each do |go|
+      begin
+        puts "processing #{go.oid}"
+        lmd = LadybirdMetadata.new(go)
+        lmd.set_returned(lmd)
+        #lmd.print_results("OID",lmd.oid_returned)
+        #lmd.print_results("parentOID",lmd._oid_returned)
+        lmd.save_string(go.oid,lmd.json_results("OID",lmd.oid_returned))
+        lmd.save_mods(go.oid,go.pid)
+        lmd.save_jp2(go.oid,go.pid,level)
+        dctref = Hash.new
+        dctref[:s3_ladybird] = lmd.save_to_s3(go,lmd,"yul_ladybird")
+        dctref[:s3_mods] = lmd.save_to_s3(go,lmd,"yul_mods")
+        dctref[:s3_image] = lmd.save_to_s3(go,lmd,"yul_image") if lmd.get_rights(lmd,go) == "Public" && go.level != 2
+        dctref[:s3_image] = lmd.save_to_s3(go,lmd,"yul_imagelim") if lmd.get_rights(lmd,go) == "Restricted" && go.level != 2
+        dctref[:s3_image] = "" if go.level == 2
+        solr_doc = lmd.processto_solr(lmd,lmd.oid_returned,lmd._oid_returned,lmd.get_geoobject,dctref,environ)
+        doc = lmd.document(solr_doc)
+        puts "json: #{doc.inspect}"
+        lmd.process_gbl_json(lmd,doc,go) #if doc[:error] == nil
+        lmd.delete_jp2(go.oid) if go.level != 2
+        puts "directory: #{EFSVolume}/oid/#{go.oid.to_i % 256}"
+      rescue Exception => msg
+        puts "ERROR!! for oid #{go.oid}"
+        go.error = msg
+        go.processed = "error"
+        if go.processed_index.nil?
+          go.processed_index = 1
+        else
+          go.processed_index = go.processed_index + 1
+        end
+          go.save!
+      end
       #TODO test s3 and cleanup bucket and commit code
       #TODO setup AWS iiif server
       #TODO setup AWS gblsolr
@@ -147,7 +159,7 @@ module GeoblMethods2
       #  layer_slug = "yale-#{handle.split("/")[1]}" if handle
       #end
       oid = go.oid
-      _oid = go.oid
+      _oid = go._oid
       level = go.level
       zindex = go.zindex
       pid = go.pid
@@ -240,6 +252,7 @@ module GeoblMethods2
             layer_geom_type_s: create_layer_geom_type(lbfields_parent),
             dc_format_s: create_layer_geom_type(lbfields_parent),
             dct_issued_dt: DateTime.parse(Time.now.to_s).utc.strftime('%FT%TZ'),
+            dct_isPartOf_sm: ["urn:yale:oid:#{_oid}"],
             oid_i: go.oid,
             parent_oid_i: go._oid,
             zindex_i: go.zindex,
@@ -445,6 +458,7 @@ module GeoblMethods2
         obj.acl.put({acl: "public-read"})
       end
       #d = Digest::MD5.file "#{EFSVolume}/oid/#{oid.to_i % 256}/#{oid}#{filename}"
+      #obj.metadata['x-amz-meta-MD5'] = d.hexdigest
       #if d.hexdigest == obj.metadata['ContentMD5']
       #  puts "FILE #{EFSVolume}/oid/#{oid.to_i % 256}/#{oid}#{filename} saved to s3"
       #else
