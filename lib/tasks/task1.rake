@@ -7,27 +7,32 @@ Rails.logger.formatter = Logger::Formatter.new
 #docker-compose run web bash
 namespace :lb2geo do
 
+  #this is only a test
   desc "testing rake"
   task :test do
     puts "this is only a test"
   end
 
+  #this is only a test
   desc "testing query to sqlserver"
   task :get_c12_count do
     puts "testsql output: #{get_c12_count}"
   end
 
+  #this only needs to be done once per deployment
   desc "populate database from ladybird"
   task :get_c12_and_hydra_id do
     startdate = "2013-01-01"
     populate_geoobject(get_c12_and_hydra_id(startdate))
   end
 
+  #unused, not using handles
   desc "create test handles"
   task :create_test_handles do
     HandleMethods.save_handles("test")
   end
 
+  #unused, not using handles
   desc "create prod handles"
   task :create_test_handles do
     HandleMethods.save_handles("prod")
@@ -35,14 +40,9 @@ namespace :lb2geo do
 
   desc "create geoblacklight schema for test"
   task :create_geobl_schema do
-    GeoblMethods2.process(1,"test")
-    GeoblMethods2.process(2,"test")
+    #GeoblMethods2.process(1,"test")
+    #GeoblMethods2.process(2,"test")
     GeoblMethods2.process(3,"test")
-  end
-
-  desc "create geoblacklight schema for prod"
-  task :create_geobl_schema_tracking do
-    GeoblMethods.process_simple_tracking(1,"prod")
   end
 
   #to clear solr:

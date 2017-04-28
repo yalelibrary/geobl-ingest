@@ -136,6 +136,8 @@ module GeoblMethods2
         File.open("#{ptdir}/#{go.oid}-gbl.json", 'w') { |file| file.write(doc) }
         lmd.ingest_to_solr(doc)
         go.processed = "success"
+        go.error = nil
+        go.processed = nil
       else
         go.error = doc[:error]
         go.processed = "error"

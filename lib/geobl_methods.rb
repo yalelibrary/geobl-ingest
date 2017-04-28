@@ -1,3 +1,4 @@
+#this file is unused, replaced by geobl_methods2
 require 'json-schema'
 require 'open-uri'
 require 'fileutils'

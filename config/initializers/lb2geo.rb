@@ -37,3 +37,4 @@ Aws.config.update({
 IIIF_URL = config.fetch("iiif_endpoint").strip
 
 S3 = Aws::S3::Resource.new(region: 'us-east-1')
+#S3.timeout = 120
