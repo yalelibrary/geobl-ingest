@@ -38,12 +38,26 @@ namespace :lb2geo do
     HandleMethods.save_handles("prod")
   end
 
-  desc "create geoblacklight schema for test"
+  #note: the second param in process is unused
+  desc "create geoblacklight schema - full"
   task :create_geobl_schema do
     #GeoblMethods2.process(1,"test")
     #GeoblMethods2.process(2,"test")
     GeoblMethods2.process(3,"test")
   end
+
+  desc "create geoblacklight schema  - schema only"
+  task :create_geobl_only do
+    GeoblMethods2.process_schema_only(1,"test")
+    GeoblMethods2.process_schema_only(2,"test")
+    GeoblMethods2.process_schema_only(3,"test")
+  end
+
+  desc "upload to s3 only"
+  task :upload_to_s3 do
+    GeoblMethods2.upload_to_s3(1)
+  end
+
 
   #to clear solr:
   #curl http://gblsolr:8983/solr/geoblacklight/update?stream.body=<delete><query>*:*</query></delete>&commit=true

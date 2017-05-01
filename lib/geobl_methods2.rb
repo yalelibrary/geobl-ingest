@@ -41,12 +41,42 @@ module GeoblMethods2
         end
           go.save!
       end
-      #TODO test s3 and cleanup bucket and commit code
-      #TODO setup AWS iiif server
-      #TODO setup AWS gblsolr
-      #TODO setup AWS gbl
-      #TODO config to AWS as above
-      #TODO run all of c12
+      #TODO: upload to s3 only rake task
+      #TODO deliver: tweak points: level,c# table,Geoobject.where,full|schema|s3 rake tasks
+      #TODO deliver: deployment strategy (dev/test/prod)? AWS/ITS?
+        #TODO components (lb2geo,iiifservers,gblsolr,gbl)
+    end
+  end
+
+  def self.process_schema_only(level,environ)
+    #Geoobject.where(level: level).order(:orig_date).limit(3).each do |go|
+    Geoobject.where(level: level).order(:orig_date).find_each do |go|
+      begin
+        puts "processing schema_only #{go.oid}"
+        lmd = LadybirdMetadata.new(go)
+        lmd.set_returned(lmd)
+        dctref = Hash.new
+        dctref[:s3_ladybird] = "https://s3.amazonaws.com/yul_ladybird/#{go.oid}-ladybird.txt"
+        dctref[:s3_mods] = "https://s3.amazonaws.com/yul_mods/#{go.oid}-mods.xml"
+        dctref[:s3_image] = "https://s3.amazonaws.com/yul_image/#{go.oid}.jp2" if lmd.get_rights(lmd,go) == "Public" && go.level != 2
+        dctref[:s3_image] = "https://s3.amazonaws.com/yul_imagelim/#{go.oid}.jp2" if lmd.get_rights(lmd,go) == "Restricted" && go.level != 2
+        dctref[:s3_image] = "" if go.level == 2
+        solr_doc = lmd.processto_solr(lmd,lmd.oid_returned,lmd._oid_returned,lmd.get_geoobject,dctref,environ)
+        doc = lmd.document(solr_doc)
+        puts "json: #{doc.inspect}"
+        lmd.process_gbl_json(lmd,doc,go) #if doc[:error] == nil
+        puts "directory: #{EFSVolume}/oid/#{go.oid.to_i % 256}"
+      rescue Exception => msg
+        puts "ERROR!! for oid #{go.oid}"
+        go.error = msg
+        go.processed = "error"
+        if go.processed_index.nil?
+          go.processed_index = 1
+        else
+          go.processed_index = go.processed_index + 1
+        end
+        go.save!
+      end
     end
   end
 
